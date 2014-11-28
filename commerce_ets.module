@@ -182,8 +182,19 @@ function commerce_ets_emoney_submit_form($payment_method, $pane_values, $checkou
       'type' => 'file'
     ),
   );
+
+  $additional_fields = array();
+  $address = array();
+  if (!empty($order->commerce_customer_billing)) {
+    $order_wrapper = entity_metadata_wrapper('commerce_order', $order);
+    if (isset($order_wrapper->commerce_customer_billing->commerce_customer_address)) {
+      $address = $order_wrapper->commerce_customer_billing->commerce_customer_address->value();
+      $additional_fields['owner'] = '';
+    }
+  }
+
   $pane_form['commerce_ets']['#markup'] = '<div id="commerce-ets-emoney-session-id" data-commerce-ets-sid="' . $session->id . '" class="element-invisible">&nbsp;</div>';
-  $pane_form += commerce_payment_credit_card_form();
+  $pane_form += commerce_payment_credit_card_form($additional_fields);
   $pane_form['credit_card']['transaction_id'] = array(
     '#type' => 'hidden',
     '#attributes' => array(
@@ -193,10 +204,57 @@ function commerce_ets_emoney_submit_form($payment_method, $pane_values, $checkou
     ),
   );
 
+  // Add necessary hidden fields required by ETS.
+  if (!empty($address['first_name'])) {
+    $pane_form['credit_card']['customer_first_name'] = array(
+      '#type' => 'hidden',
+      '#value' => check_plain($address['first_name']),
+      '#attributes' => array(
+        'class' => array(
+          'ETSFirstName',
+        ),
+      ),
+    );
+  }
+  if (!empty($address['last_name'])) {
+    $pane_form['credit_card']['customer_last_name'] = array(
+      '#type' => 'hidden',
+      '#value' => check_plain($address['last_name']),
+      '#attributes' => array(
+        'class' => array(
+          'ETSLastName',
+        ),
+      ),
+    );
+  }
+  if (!empty($address['postal_code'])) {
+    $pane_form['credit_card']['postal_code'] = array(
+      '#type' => 'hidden',
+      '#value' => check_plain($address['postal_code']),
+      '#attributes' => array(
+        'class' => array(
+          'ETSBillingZipCode',
+        ),
+      ),
+    );
+  }
+  if (!empty($address['thoroughfare'])) {
+    $pane_form['credit_card']['billing_street'] = array(
+      '#type' => 'hidden',
+      '#value' => check_plain($address['thoroughfare']),
+      '#attributes' => array(
+        'class' => array(
+          'ETSBillingStreet',
+        ),
+      ),
+    );
+  }
+
   $classes = array(
     'number' => 'ETSCardNumber',
     'exp_month' => 'ETSExpirationMonth',
     'exp_year' => 'ETSExpirationYear',
+    'owner' => 'ETSNameOnCard',
   );
   // Add the necessary classes in order for ETS to find our form elements.
   foreach (element_children($pane_form['credit_card']) as $element_key) {
