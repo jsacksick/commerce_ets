@@ -297,39 +297,48 @@ function commerce_ets_emoney_submit_form_validate($payment_method, $pane_form, $
  * Payment method callback: checkout form submission.
  */
 function commerce_ets_emoney_submit_form_submit($payment_method, $pane_form, $pane_values, $order, $charge) {
-  $library = commerce_ets_emoney_get_library($payment_method);
-  $verify = $library->set('action', 'verify')
-    ->set('sessionID', $_SESSION['HP_SESSION_ID'])
-    ->set('transactionID', $pane_values['credit_card']['transaction_id'])
-    ->send();
-
   $transaction = commerce_payment_transaction_new('ets_emoney', $order->order_id);
   $transaction->amount = $charge['amount'];
   $transaction->currency_code = $charge['currency_code'];
-  $transaction->data['session_id'] = $_SESSION['HP_SESSION_ID'];
   $transaction->instance_id = $payment_method['instance_id'];
 
-  if (!empty($verify->transactions)) {
-    $transaction->payload[REQUEST_TIME] = (array) $verify->transactions;
+  // Check if the library could be loaded.
+  if ($library = commerce_ets_emoney_get_library($payment_method)) {
+    $verify = $library->set('action', 'verify')
+      ->set('sessionID', $_SESSION['HP_SESSION_ID'])
+      ->set('transactionID', $pane_values['credit_card']['transaction_id'])
+      ->send();
+
+    $transaction->data['session_id'] = $_SESSION['HP_SESSION_ID'];
+
+    if (!empty($verify->transactions)) {
+      $transaction->payload[REQUEST_TIME] = (array) $verify->transactions;
+    }
+
+    // Check if it's a successful transaction.
+    if (!isset($verify->transactions->status) || $verify->transactions->status !== 'success') {
+      $transaction->status = COMMERCE_PAYMENT_STATUS_FAILURE;
+    }
+    else {
+      $transaction->status = COMMERCE_PAYMENT_STATUS_SUCCESS;
+      $transaction->remote_status = $verify->transactions->status;
+      $transaction->remote_id = $verify->transactions->id;
+      $transaction->message = check_plain($verify->transactions->message);
+    }
+    commerce_payment_transaction_save($transaction);
+
+    if ($transaction->status === COMMERCE_PAYMENT_STATUS_FAILURE) {
+      drupal_set_message(t('We received the following error processing your card. Please enter your information again or try a different card.'), 'error');
+      drupal_set_message(check_plain($verify->transactions->message), 'error');
+      return FALSE;
+    }
   }
 
-  // Check if it's a successful transaction.
-  if (!isset($verify->transactions->status) || $verify->transactions->status !== 'success') {
-    $transaction->status = COMMERCE_PAYMENT_STATUS_FAILURE;
-  }
-  else {
-    $transaction->status = COMMERCE_PAYMENT_STATUS_SUCCESS;
-    $transaction->remote_status = $verify->transactions->status;
-    $transaction->remote_id = $verify->transactions->id;
-    $transaction->message = check_plain($verify->transactions->message);
-  }
+  $transaction->message = 'The payment library could not be loaded';
+  $transaction->status = COMMERCE_PAYMENT_STATUS_FAILURE;
   commerce_payment_transaction_save($transaction);
-
-  if ($transaction->status === COMMERCE_PAYMENT_STATUS_FAILURE) {
-    drupal_set_message(t('We received the following error processing your card. Please enter your information again or try a different card.'), 'error');
-    drupal_set_message(check_plain($verify->transactions->message), 'error');
-    return FALSE;
-  }
+  drupal_set_message(t('We could not process your payment, please try again later.'), 'error');
+  return FALSE;
 }
 
 /**
