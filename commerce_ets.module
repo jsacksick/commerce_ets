@@ -261,7 +261,24 @@ function commerce_ets_emoney_submit_form($payment_method, $pane_values, $checkou
     if (!isset($classes[$element_key])) {
       continue;
     }
-    $pane_form['credit_card'][$element_key]['#attributes']['class'][] = $classes[$element_key];
+    $element = &$pane_form['credit_card'][$element_key];
+    $element['#attributes']['class'][] = $classes[$element_key];
+    if ($element['#type'] === 'textfield') {
+      // Add a fake required marker, the field values are going to be wiped
+      // on submission, so set #required to FALSE in order to bypass the
+      // validation.
+      // Therefore, the field credit card number won't touch the webserver
+      $element['#required'] = FALSE;
+      $element['#title_display'] = 'none';
+      $variables = array(
+        'element' => array(
+          '#title' => $element['#title'],
+          '#required' => TRUE,
+          '#title_display' => 'before',
+        ),
+      );
+      $pane_form['credit_card'][$element_key]['#field_prefix'] = theme('form_element_label', $variables);
+    }
   }
 
   return $pane_form;

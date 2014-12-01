@@ -56,6 +56,7 @@
   // Trigger the submission in case of success.
   function commerceETSPaymentSuccess(paymentObj) {
     var checkoutForm = $(checkoutFormSelector);
+    $('#payment-details input:text', checkoutForm).val('');
     $('.commerce-ets-emoney-transaction-id', checkoutForm).val(paymentObj.transactions.id);
     $(checkoutForm).trigger('submit');
   }
